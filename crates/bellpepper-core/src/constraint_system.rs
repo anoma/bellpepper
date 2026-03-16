@@ -115,17 +115,18 @@ pub trait ConstraintSystem<Scalar: PrimeField>: Sized + Send {
 
     /// Gets the "root" constraint system, bypassing the namespacing.
     /// Not intended for downstream use; use `namespace` instead.
-    fn get_root(&mut self) -> &mut Self::Root;
+    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T;
 
     /// Begin a namespace for this constraint system.
-    fn namespace<NR, N>(&mut self, name_fn: N) -> Namespace<'_, Scalar, Self::Root>
+    fn namespace<NR, N, T, F>(&mut self, name_fn: N, f: F) -> T
     where
         NR: Into<String>,
         N: FnOnce() -> NR,
+        F: FnOnce(Namespace<'_, Scalar, Self::Root>) -> T,
     {
-        self.get_root().push_namespace(name_fn);
+        self.get_root(|x| x.push_namespace(name_fn));
 
-        Namespace(self.get_root(), Default::default())
+        self.get_root(|x| f(Namespace(x, Default::default())))
     }
 
     /// Most implementations of ConstraintSystem are not 'extensible': they won't implement a specialized
@@ -298,8 +299,8 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
         panic!("only the root's pop_namespace should be called");
     }
 
-    fn get_root(&mut self) -> &mut Self::Root {
-        self.0.get_root()
+    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+        self.0.get_root(f)
     }
 
     fn is_witness_generator(&self) -> bool {
@@ -328,7 +329,7 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
 
 impl<'a, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> Drop for Namespace<'a, Scalar, CS> {
     fn drop(&mut self) {
-        self.get_root().pop_namespace()
+        self.get_root(|x| x.pop_namespace())
     }
 }
 
@@ -384,16 +385,17 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
         (**self).pop_namespace()
     }
 
-    fn get_root(&mut self) -> &mut Self::Root {
-        (**self).get_root()
+    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+        (**self).get_root(f)
     }
 
-    fn namespace<NR, N>(&mut self, name_fn: N) -> Namespace<'_, Scalar, Self::Root>
+    fn namespace<NR, N, T, F>(&mut self, name_fn: N, f: F) -> T
     where
         NR: Into<String>,
         N: FnOnce() -> NR,
+        F: FnOnce(Namespace<'_, Scalar, Self::Root>) -> T,
     {
-        (**self).namespace(name_fn)
+        (**self).namespace(name_fn, f)
     }
 
     fn is_extensible() -> bool {

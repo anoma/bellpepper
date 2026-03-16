@@ -293,10 +293,10 @@ pub fn u64_into_boolean_vec_le<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>
         .into_iter()
         .enumerate()
         .map(|(i, b)| {
-            Ok(Boolean::from(AllocatedBit::alloc(
-                cs.namespace(|| format!("bit {}", i)),
+            Ok(Boolean::from(cs.namespace(|| format!("bit {}", i), |ns| AllocatedBit::alloc(
+                ns,
                 b,
-            )?))
+            ))?))
         })
         .collect::<Result<Vec<_>, SynthesisError>>()?;
 
@@ -357,7 +357,7 @@ where
         .into_iter()
         .rev()
         .enumerate()
-        .map(|(i, b)| AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), b))
+        .map(|(i, b)| cs.namespace(|| format!("bit {}", i), |ns| AllocatedBit::alloc(ns, b)))
         .collect::<Result<Vec<_>, SynthesisError>>()?;
 
     Ok(bits)
@@ -525,11 +525,11 @@ impl Boolean {
         Scalar: PrimeField,
         CS: ConstraintSystem<Scalar>,
     {
-        Ok(Boolean::not(&Boolean::and(
-            cs.namespace(|| "not and (not a) (not b)"),
+        Ok(Boolean::not(&cs.namespace(|| "not and (not a) (not b)", |ns| Boolean::and(
+            ns,
             &Boolean::not(a),
             &Boolean::not(b),
-        )?))
+        ))?))
     }
 
     /// Computes (a and b) xor ((not a) and c)
@@ -738,7 +738,7 @@ impl Boolean {
         // (b) * (c) = (bc)
         // (2bc - b - c) * (a) = bc - maj
 
-        let bc = Self::and(cs.namespace(|| "b and c"), b, c)?;
+        let bc = cs.namespace(|| "b and c", |ns| Self::and(ns, b, c))?;
 
         cs.enforce(
             || "maj computation",
@@ -792,8 +792,8 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = TestConstraintSystem::<Fr>::new();
-                let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
-                let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
+                let a = cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(*a_val))).unwrap();
+                let b = cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(*b_val))).unwrap();
                 let c = AllocatedBit::xor(&mut cs, &a, &b).unwrap();
                 assert_eq!(c.value.unwrap(), *a_val ^ *b_val);
 
@@ -828,8 +828,8 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = TestConstraintSystem::<Fr>::new();
-                let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
-                let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
+                let a = cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(*a_val))).unwrap();
+                let b = cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(*b_val))).unwrap();
                 let c = AllocatedBit::and(&mut cs, &a, &b).unwrap();
                 assert_eq!(c.value.unwrap(), *a_val & *b_val);
 
@@ -864,8 +864,8 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = TestConstraintSystem::<Fr>::new();
-                let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
-                let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
+                let a = cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(*a_val))).unwrap();
+                let b = cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(*b_val))).unwrap();
                 let c = AllocatedBit::and_not(&mut cs, &a, &b).unwrap();
                 assert_eq!(c.value.unwrap(), *a_val & !*b_val);
 
@@ -900,8 +900,8 @@ mod test {
         for a_val in [false, true].iter() {
             for b_val in [false, true].iter() {
                 let mut cs = TestConstraintSystem::<Fr>::new();
-                let a = AllocatedBit::alloc(cs.namespace(|| "a"), Some(*a_val)).unwrap();
-                let b = AllocatedBit::alloc(cs.namespace(|| "b"), Some(*b_val)).unwrap();
+                let a = cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(*a_val))).unwrap();
+                let b = cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(*b_val))).unwrap();
                 let c = AllocatedBit::nor(&mut cs, &a, &b).unwrap();
                 assert_eq!(c.value.unwrap(), !*a_val & !*b_val);
 
@@ -941,10 +941,10 @@ mod test {
                             let mut cs = TestConstraintSystem::<Fr>::new();
 
                             let mut a = Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| "a"), Some(a_bool)).unwrap(),
+                                cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(a_bool))).unwrap(),
                             );
                             let mut b = Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| "b"), Some(b_bool)).unwrap(),
+                                cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(b_bool))).unwrap(),
                             );
 
                             if a_neg {
@@ -963,7 +963,7 @@ mod test {
 
                             let mut a = Boolean::Constant(a_bool);
                             let mut b = Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| "b"), Some(b_bool)).unwrap(),
+                                cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(b_bool))).unwrap(),
                             );
 
                             if a_neg {
@@ -981,7 +981,7 @@ mod test {
                             let mut cs = TestConstraintSystem::<Fr>::new();
 
                             let mut a = Boolean::from(
-                                AllocatedBit::alloc(cs.namespace(|| "a"), Some(a_bool)).unwrap(),
+                                cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(a_bool))).unwrap(),
                             );
                             let mut b = Boolean::Constant(b_bool);
 
@@ -1125,7 +1125,7 @@ mod test {
 
                 {
                     let mut dyn_construct = |operand, name| {
-                        let cs = cs.namespace(|| name);
+                        cs.namespace(|| name, |cs|
 
                         match operand {
                             OperandType::True => Boolean::constant(true),
@@ -1142,7 +1142,7 @@ mod test {
                             OperandType::NegatedAllocatedFalse => {
                                 Boolean::from(AllocatedBit::alloc(cs, Some(false)).unwrap()).not()
                             }
-                        }
+                        })
                     };
 
                     a = dyn_construct(first_operand, "a");
@@ -1334,7 +1334,7 @@ mod test {
 
                 {
                     let mut dyn_construct = |operand, name| {
-                        let cs = cs.namespace(|| name);
+                        cs.namespace(|| name, |cs|
 
                         match operand {
                             OperandType::True => Boolean::constant(true),
@@ -1351,7 +1351,7 @@ mod test {
                             OperandType::NegatedAllocatedFalse => {
                                 Boolean::from(AllocatedBit::alloc(cs, Some(false)).unwrap()).not()
                             }
-                        }
+                        })
                     };
 
                     a = dyn_construct(first_operand, "a");
@@ -1566,7 +1566,7 @@ mod test {
 
                 {
                     let mut dyn_construct = |operand, name| {
-                        let cs = cs.namespace(|| name);
+                        cs.namespace(|| name, |cs|
 
                         match operand {
                             OperandType::True => Boolean::constant(true),
@@ -1583,7 +1583,7 @@ mod test {
                             OperandType::NegatedAllocatedFalse => {
                                 Boolean::from(AllocatedBit::alloc(cs, Some(false)).unwrap()).not()
                             }
-                        }
+                        })
                     };
 
                     a = dyn_construct(first_operand, "a");
@@ -1845,7 +1845,7 @@ mod test {
 
                     {
                         let mut dyn_construct = |operand, name| {
-                            let cs = cs.namespace(|| name);
+                            cs.namespace(|| name, |cs|
 
                             match operand {
                                 OperandType::True => Boolean::constant(true),
@@ -1864,7 +1864,7 @@ mod test {
                                     Boolean::from(AllocatedBit::alloc(cs, Some(false)).unwrap())
                                         .not()
                                 }
-                            }
+                            })
                         };
 
                         a = dyn_construct(first_operand, "a");
@@ -1937,7 +1937,7 @@ mod test {
 
                     {
                         let mut dyn_construct = |operand, name| {
-                            let cs = cs.namespace(|| name);
+                            cs.namespace(|| name, |cs|
 
                             match operand {
                                 OperandType::True => Boolean::constant(true),
@@ -1956,7 +1956,7 @@ mod test {
                                     Boolean::from(AllocatedBit::alloc(cs, Some(false)).unwrap())
                                         .not()
                                 }
-                            }
+                            })
                         };
 
                         a = dyn_construct(first_operand, "a");
@@ -2010,11 +2010,11 @@ mod test {
 
             let value = None;
             // if value is none, fail with SynthesisError
-            let is_err = AllocatedBit::alloc_conditionally(
-                cs.namespace(|| "alloc_conditionally"),
+            let is_err = cs.namespace(|| "alloc_conditionally", |ns| AllocatedBit::alloc_conditionally(
+                ns,
                 value,
                 &b,
-            )
+            ))
             .is_err();
             assert!(is_err);
         }
@@ -2025,11 +2025,11 @@ mod test {
 
             let value = Some(true);
             let b = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
-            let allocated_value = AllocatedBit::alloc_conditionally(
-                cs.namespace(|| "alloc_conditionally"),
+            let allocated_value = cs.namespace(|| "alloc_conditionally", |ns| AllocatedBit::alloc_conditionally(
+                ns,
                 value,
                 &b,
-            )
+            ))
             .unwrap();
 
             assert!(allocated_value.get_value().unwrap());
@@ -2042,7 +2042,7 @@ mod test {
 
             let value = Some(true);
             let b = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
-            AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b)
+            cs.namespace(|| "alloc_conditionally", |ns| AllocatedBit::alloc_conditionally(ns, value, &b))
                 .unwrap();
 
             assert!(!cs.is_satisfied());
@@ -2055,7 +2055,7 @@ mod test {
             //check with false bit
             let mut cs = TestConstraintSystem::<Fr>::new();
             let b1 = AllocatedBit::alloc(&mut cs, Some(false)).unwrap();
-            AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b1)
+            cs.namespace(|| "alloc_conditionally", |ns| AllocatedBit::alloc_conditionally(ns, value, &b1))
                 .unwrap();
 
             assert!(cs.is_satisfied());
@@ -2063,7 +2063,7 @@ mod test {
             //check with true bit
             let mut cs = TestConstraintSystem::<Fr>::new();
             let b2 = AllocatedBit::alloc(&mut cs, Some(true)).unwrap();
-            AllocatedBit::alloc_conditionally(cs.namespace(|| "alloc_conditionally"), value, &b2)
+            cs.namespace(|| "alloc_conditionally", |ns| AllocatedBit::alloc_conditionally(ns, value, &b2))
                 .unwrap();
 
             assert!(cs.is_satisfied());
