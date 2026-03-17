@@ -89,9 +89,14 @@ where
         coeff = coeff.double();
     }
 
-    let alloc_num = AllocatedNum::alloc(cs.namespace(|| "input"), || {
-        num.get_value().ok_or(SynthesisError::AssignmentMissing)
-    })?;
+    let alloc_num = cs.namespace(
+        || "input",
+        |ns| {
+            AllocatedNum::alloc(ns, || {
+                num.get_value().ok_or(SynthesisError::AssignmentMissing)
+            })
+        },
+    )?;
 
     // num * 1 = input
     cs.enforce(
@@ -132,15 +137,19 @@ mod tests {
                 .enumerate()
                 .map(|(i, &b)| {
                     Boolean::from(
-                        AllocatedBit::alloc(cs.namespace(|| format!("bit {}", i)), Some(b))
-                            .unwrap(),
+                        cs.namespace(
+                            || format!("bit {}", i),
+                            |ns| AllocatedBit::alloc(ns, Some(b)),
+                        )
+                        .unwrap(),
                     )
                 })
                 .collect::<Vec<_>>();
 
             let expected_inputs = compute_multipacking::<Fr>(&bits);
 
-            pack_into_inputs(cs.namespace(|| "pack"), &circuit_bits).unwrap();
+            cs.namespace(|| "pack", |ns| pack_into_inputs(ns, &circuit_bits))
+                .unwrap();
 
             assert!(cs.is_satisfied());
             assert!(cs.verify(&expected_inputs));

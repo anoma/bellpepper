@@ -95,7 +95,10 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for BenchCS<Scalar> {
 
     fn pop_namespace(&mut self) {}
 
-    fn get_root(&mut self) -> &mut Self::Root {
-        self
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
+        f(self)
     }
 }

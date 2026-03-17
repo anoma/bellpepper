@@ -109,14 +109,17 @@ impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
         NR: Into<String>,
         N: FnOnce() -> NR,
     {
-        self.cs.get_root().push_namespace(name_fn)
+        self.cs.get_root(|x| x.push_namespace(name_fn))
     }
 
     fn pop_namespace(&mut self) {
-        self.cs.get_root().pop_namespace()
+        self.cs.get_root(|x| x.pop_namespace())
     }
 
-    fn get_root(&mut self) -> &mut Self::Root {
-        self
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
+        f(self)
     }
 }

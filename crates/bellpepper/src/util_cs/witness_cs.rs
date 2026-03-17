@@ -124,8 +124,11 @@ where
         // Do nothing; we don't care about namespaces in this context.
     }
 
-    fn get_root(&mut self) -> &mut Self::Root {
-        self
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
+        f(self)
     }
 
     ////////////////////////////////////////////////////////////////////////////////

@@ -96,26 +96,34 @@ fn mixing_g<Scalar: PrimeField, CS: ConstraintSystem<Scalar>, M>(
 where
     M: ConstraintSystem<Scalar, Root = MultiEq<Scalar, CS>>,
 {
-    v[a] = UInt32::addmany(
-        cs.namespace(|| "mixing step 1"),
-        &[v[a].clone(), v[b].clone(), x.clone()],
+    v[a] = cs.namespace(
+        || "mixing step 1",
+        |ns| UInt32::addmany(ns, &[v[a].clone(), v[b].clone(), x.clone()]),
     )?;
-    v[d] = v[d].xor(cs.namespace(|| "mixing step 2"), &v[a])?.rotr(R1);
-    v[c] = UInt32::addmany(
-        cs.namespace(|| "mixing step 3"),
-        &[v[c].clone(), v[d].clone()],
+    v[d] = cs
+        .namespace(|| "mixing step 2", |ns| v[d].xor(ns, &v[a]))?
+        .rotr(R1);
+    v[c] = cs.namespace(
+        || "mixing step 3",
+        |ns| UInt32::addmany(ns, &[v[c].clone(), v[d].clone()]),
     )?;
-    v[b] = v[b].xor(cs.namespace(|| "mixing step 4"), &v[c])?.rotr(R2);
-    v[a] = UInt32::addmany(
-        cs.namespace(|| "mixing step 5"),
-        &[v[a].clone(), v[b].clone(), y.clone()],
+    v[b] = cs
+        .namespace(|| "mixing step 4", |ns| v[b].xor(ns, &v[c]))?
+        .rotr(R2);
+    v[a] = cs.namespace(
+        || "mixing step 5",
+        |ns| UInt32::addmany(ns, &[v[a].clone(), v[b].clone(), y.clone()]),
     )?;
-    v[d] = v[d].xor(cs.namespace(|| "mixing step 6"), &v[a])?.rotr(R3);
-    v[c] = UInt32::addmany(
-        cs.namespace(|| "mixing step 7"),
-        &[v[c].clone(), v[d].clone()],
+    v[d] = cs
+        .namespace(|| "mixing step 6", |ns| v[d].xor(ns, &v[a]))?
+        .rotr(R3);
+    v[c] = cs.namespace(
+        || "mixing step 7",
+        |ns| UInt32::addmany(ns, &[v[c].clone(), v[d].clone()]),
     )?;
-    v[b] = v[b].xor(cs.namespace(|| "mixing step 8"), &v[c])?.rotr(R4);
+    v[b] = cs
+        .namespace(|| "mixing step 8", |ns| v[b].xor(ns, &v[c]))?
+        .rotr(R4);
 
     Ok(())
 }
@@ -199,16 +207,19 @@ fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
 
     assert_eq!(v.len(), 16);
 
-    v[12] = v[12].xor(cs.namespace(|| "first xor"), &UInt32::constant(t as u32))?;
-    v[13] = v[13].xor(
-        cs.namespace(|| "second xor"),
-        &UInt32::constant((t >> 32) as u32),
+    v[12] = cs.namespace(
+        || "first xor",
+        |ns| v[12].xor(ns, &UInt32::constant(t as u32)),
+    )?;
+    v[13] = cs.namespace(
+        || "second xor",
+        |ns| v[13].xor(ns, &UInt32::constant((t >> 32) as u32)),
     )?;
 
     if f {
-        v[14] = v[14].xor(
-            cs.namespace(|| "third xor"),
-            &UInt32::constant(u32::max_value()),
+        v[14] = cs.namespace(
+            || "third xor",
+            |ns| v[14].xor(ns, &UInt32::constant(u32::max_value())),
         )?;
     }
 
@@ -216,99 +227,59 @@ fn blake2s_compression<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
         let mut cs = MultiEq::new(&mut cs);
 
         for i in 0..10 {
-            let mut cs = cs.namespace(|| format!("round {}", i));
+            cs.namespace(
+                || format!("round {}", i),
+                |mut cs| {
+                    let s = SIGMA[i % 10];
 
-            let s = SIGMA[i % 10];
+                    cs.namespace(
+                        || "mixing invocation 1",
+                        |ns| mixing_g(ns, &mut v, 0, 4, 8, 12, &m[s[0]], &m[s[1]]),
+                    )?;
+                    cs.namespace(
+                        || "mixing invocation 2",
+                        |ns| mixing_g(ns, &mut v, 1, 5, 9, 13, &m[s[2]], &m[s[3]]),
+                    )?;
+                    cs.namespace(
+                        || "mixing invocation 3",
+                        |ns| mixing_g(ns, &mut v, 2, 6, 10, 14, &m[s[4]], &m[s[5]]),
+                    )?;
+                    cs.namespace(
+                        || "mixing invocation 4",
+                        |ns| mixing_g(ns, &mut v, 3, 7, 11, 15, &m[s[6]], &m[s[7]]),
+                    )?;
 
-            mixing_g(
-                cs.namespace(|| "mixing invocation 1"),
-                &mut v,
-                0,
-                4,
-                8,
-                12,
-                &m[s[0]],
-                &m[s[1]],
-            )?;
-            mixing_g(
-                cs.namespace(|| "mixing invocation 2"),
-                &mut v,
-                1,
-                5,
-                9,
-                13,
-                &m[s[2]],
-                &m[s[3]],
-            )?;
-            mixing_g(
-                cs.namespace(|| "mixing invocation 3"),
-                &mut v,
-                2,
-                6,
-                10,
-                14,
-                &m[s[4]],
-                &m[s[5]],
-            )?;
-            mixing_g(
-                cs.namespace(|| "mixing invocation 4"),
-                &mut v,
-                3,
-                7,
-                11,
-                15,
-                &m[s[6]],
-                &m[s[7]],
-            )?;
-
-            mixing_g(
-                cs.namespace(|| "mixing invocation 5"),
-                &mut v,
-                0,
-                5,
-                10,
-                15,
-                &m[s[8]],
-                &m[s[9]],
-            )?;
-            mixing_g(
-                cs.namespace(|| "mixing invocation 6"),
-                &mut v,
-                1,
-                6,
-                11,
-                12,
-                &m[s[10]],
-                &m[s[11]],
-            )?;
-            mixing_g(
-                cs.namespace(|| "mixing invocation 7"),
-                &mut v,
-                2,
-                7,
-                8,
-                13,
-                &m[s[12]],
-                &m[s[13]],
-            )?;
-            mixing_g(
-                cs.namespace(|| "mixing invocation 8"),
-                &mut v,
-                3,
-                4,
-                9,
-                14,
-                &m[s[14]],
-                &m[s[15]],
+                    cs.namespace(
+                        || "mixing invocation 5",
+                        |ns| mixing_g(ns, &mut v, 0, 5, 10, 15, &m[s[8]], &m[s[9]]),
+                    )?;
+                    cs.namespace(
+                        || "mixing invocation 6",
+                        |ns| mixing_g(ns, &mut v, 1, 6, 11, 12, &m[s[10]], &m[s[11]]),
+                    )?;
+                    cs.namespace(
+                        || "mixing invocation 7",
+                        |ns| mixing_g(ns, &mut v, 2, 7, 8, 13, &m[s[12]], &m[s[13]]),
+                    )?;
+                    cs.namespace(
+                        || "mixing invocation 8",
+                        |ns| mixing_g(ns, &mut v, 3, 4, 9, 14, &m[s[14]], &m[s[15]]),
+                    )?;
+                    Result::<(), SynthesisError>::Ok(())
+                },
             )?;
         }
     }
 
     for i in 0..8 {
-        let mut cs = cs.namespace(|| format!("h[{i}] ^ v[{i}] ^ v[{i} + 8]", i = i));
-
-        h[i] = h[i].xor(cs.namespace(|| "first xor"), &v[i])?;
-        h[i] = h[i].xor(cs.namespace(|| "second xor"), &v[i + 8])?;
+        cs.namespace(
+            || format!("h[{i}] ^ v[{i}] ^ v[{i} + 8]", i = i),
+            |mut cs| {
+                h[i] = cs.namespace(|| "first xor", |ns| h[i].xor(ns, &v[i]))?;
+                h[i] = cs.namespace(|| "second xor", |ns| h[i].xor(ns, &v[i + 8]))?;
+                Result::<(), SynthesisError>::Ok(())
+            },
+        )?;
     }
 
     Ok(())
@@ -385,20 +356,24 @@ pub fn blake2s<Scalar: PrimeField, CS: ConstraintSystem<Scalar>>(
     }
 
     for (i, block) in blocks[0..blocks.len() - 1].iter().enumerate() {
-        let cs = cs.namespace(|| format!("block {}", i));
-
-        blake2s_compression(cs, &mut h, block, ((i as u64) + 1) * 64, false)?;
+        cs.namespace(
+            || format!("block {}", i),
+            |cs| blake2s_compression(cs, &mut h, block, ((i as u64) + 1) * 64, false),
+        )?;
     }
 
     {
-        let cs = cs.namespace(|| "final block");
-
-        blake2s_compression(
-            cs,
-            &mut h,
-            &blocks[blocks.len() - 1],
-            (input.len() / 8) as u64,
-            true,
+        cs.namespace(
+            || "final block",
+            |cs| {
+                blake2s_compression(
+                    cs,
+                    &mut h,
+                    &blocks[blocks.len() - 1],
+                    (input.len() / 8) as u64,
+                    true,
+                )
+            },
         )?;
     }
 
@@ -446,9 +421,12 @@ mod test {
         let mut cs = TestConstraintSystem::<Fr>::new();
         let input_bits: Vec<_> = (0..512)
             .map(|i| {
-                AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(true))
-                    .unwrap()
-                    .into()
+                cs.namespace(
+                    || format!("input bit {}", i),
+                    |ns| AllocatedBit::alloc(ns, Some(true)),
+                )
+                .unwrap()
+                .into()
             })
             .collect();
         blake2s(&mut cs, &input_bits, b"12345678").unwrap();
@@ -469,9 +447,12 @@ mod test {
         let input_bits: Vec<_> = (0..512)
             .map(|_| Boolean::constant(rng.next_u32() % 2 != 0))
             .chain((0..512).map(|i| {
-                AllocatedBit::alloc(cs.namespace(|| format!("input bit {}", i)), Some(true))
-                    .unwrap()
-                    .into()
+                cs.namespace(
+                    || format!("input bit {}", i),
+                    |ns| AllocatedBit::alloc(ns, Some(true)),
+                )
+                .unwrap()
+                .into()
             }))
             .collect();
         blake2s(&mut cs, &input_bits, b"12345678").unwrap();
@@ -518,12 +499,15 @@ mod test {
 
             for (byte_i, input_byte) in data.into_iter().enumerate() {
                 for bit_i in 0..8 {
-                    let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
-
-                    input_bits.push(
-                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
-                            .unwrap()
-                            .into(),
+                    cs.namespace(
+                        || format!("input bit {} {}", byte_i, bit_i),
+                        |cs| {
+                            input_bits.push(
+                                AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                                    .unwrap()
+                                    .into(),
+                            )
+                        },
                     );
                 }
             }
@@ -565,12 +549,15 @@ mod test {
 
         for (byte_i, input_byte) in data.into_iter().enumerate() {
             for bit_i in 0..8 {
-                let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
-
-                input_bits.push(
-                    AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
-                        .unwrap()
-                        .into(),
+                cs.namespace(
+                    || format!("input bit {} {}", byte_i, bit_i),
+                    |cs| {
+                        input_bits.push(
+                            AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                                .unwrap()
+                                .into(),
+                        )
+                    },
                 );
             }
         }
@@ -602,12 +589,15 @@ mod test {
 
         for (byte_i, input_byte) in data.into_iter().enumerate() {
             for bit_i in 0..8 {
-                let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
-
-                input_bits.push(
-                    AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
-                        .unwrap()
-                        .into(),
+                cs.namespace(
+                    || format!("input bit {} {}", byte_i, bit_i),
+                    |cs| {
+                        input_bits.push(
+                            AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                                .unwrap()
+                                .into(),
+                        )
+                    },
                 );
             }
         }
@@ -657,12 +647,15 @@ mod test {
 
             for (byte_i, input_byte) in data.into_iter().enumerate() {
                 for bit_i in 0..8 {
-                    let cs = cs.namespace(|| format!("input bit {} {}", byte_i, bit_i));
-
-                    input_bits.push(
-                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
-                            .unwrap()
-                            .into(),
+                    cs.namespace(
+                        || format!("input bit {} {}", byte_i, bit_i),
+                        |cs| {
+                            input_bits.push(
+                                AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                                    .unwrap()
+                                    .into(),
+                            )
+                        },
                     );
                 }
             }
