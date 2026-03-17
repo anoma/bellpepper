@@ -23,6 +23,12 @@ impl<Scalar: PrimeField> Clone for AllocatedNum<Scalar> {
 }
 
 impl<Scalar: PrimeField> AllocatedNum<Scalar> {
+    /// This constructs an allocated number with an arbitrary variable
+    /// and value. Circuit implementations are not recommended to use this.
+    pub fn new_unchecked(variable: Variable, value: Option<Scalar>) -> Self {
+        Self { value, variable }
+    }
+    
     /// Allocate a `Variable(Aux)` in a `ConstraintSystem`.
     pub fn alloc<CS, F>(mut cs: CS, value: F) -> Result<Self, SynthesisError>
     where
