@@ -70,7 +70,10 @@ where
 
     let mut cur = get_sha256_iv();
     for (i, block) in padded.chunks(512).enumerate() {
-        cur = cs.namespace(|| format!("block {}", i), |ns| sha256_compression_function(ns, block, &cur))?;
+        cur = cs.namespace(
+            || format!("block {}", i),
+            |ns| sha256_compression_function(ns, block, &cur),
+        )?;
     }
 
     Ok(cur.into_iter().flat_map(|e| e.into_bits_be()).collect())
@@ -102,27 +105,29 @@ where
     let mut cs = MultiEq::new(cs);
 
     for i in 16..64 {
-        cs.namespace(|| format!("w extension {}", i), |mut cs| {
+        cs.namespace(
+            || format!("w extension {}", i),
+            |mut cs| {
+                // s0 := (w[i-15] rightrotate 7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift 3)
+                let mut s0 = w[i - 15].rotr(7);
+                s0 = cs.namespace(|| "first xor for s0", |ns| s0.xor(ns, &w[i - 15].rotr(18)))?;
+                s0 = cs.namespace(|| "second xor for s0", |ns| s0.xor(ns, &w[i - 15].shr(3)))?;
 
-        // s0 := (w[i-15] rightrotate 7) xor (w[i-15] rightrotate 18) xor (w[i-15] rightshift 3)
-        let mut s0 = w[i - 15].rotr(7);
-        s0 = cs.namespace(|| "first xor for s0", |ns| s0.xor(ns, &w[i - 15].rotr(18)))?;
-        s0 = cs.namespace(|| "second xor for s0", |ns| s0.xor(ns, &w[i - 15].shr(3)))?;
+                // s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
+                let mut s1 = w[i - 2].rotr(17);
+                s1 = cs.namespace(|| "first xor for s1", |ns| s1.xor(ns, &w[i - 2].rotr(19)))?;
+                s1 = cs.namespace(|| "second xor for s1", |ns| s1.xor(ns, &w[i - 2].shr(10)))?;
 
-        // s1 := (w[i-2] rightrotate 17) xor (w[i-2] rightrotate 19) xor (w[i-2] rightshift 10)
-        let mut s1 = w[i - 2].rotr(17);
-        s1 = cs.namespace(|| "first xor for s1", |ns| s1.xor(ns, &w[i - 2].rotr(19)))?;
-        s1 = cs.namespace(|| "second xor for s1", |ns| s1.xor(ns, &w[i - 2].shr(10)))?;
+                let tmp = cs.namespace(
+                    || "computation of w[i]",
+                    |ns| UInt32::addmany(ns, &[w[i - 16].clone(), s0, w[i - 7].clone(), s1]),
+                )?;
 
-        let tmp = cs.namespace(|| "computation of w[i]", |ns| UInt32::addmany(
-            ns,
-            &[w[i - 16].clone(), s0, w[i - 7].clone(), s1],
-        ))?;
-
-        // w[i] := w[i-16] + s0 + w[i-7] + s1
-            w.push(tmp);
-            Result::<(), SynthesisError>::Ok(())
-        })?;
+                // w[i] := w[i-16] + s0 + w[i-7] + s1
+                w.push(tmp);
+                Result::<(), SynthesisError>::Ok(())
+            },
+        )?;
     }
 
     assert_eq!(w.len(), 64);
@@ -159,65 +164,67 @@ where
     let mut h = current_hash_value[7].clone();
 
     for i in 0..64 {
-        (a, b, c, d, e, f, g) = cs.namespace(|| format!("compression round {}", i), |mut cs| {
+        (a, b, c, d, e, f, g) = cs.namespace(
+            || format!("compression round {}", i),
+            |mut cs| {
+                // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
+                let new_e = cs.namespace(|| "deferred e computation", |ns| e.compute(ns, &[]))?;
+                let mut s1 = new_e.rotr(6);
+                s1 = cs.namespace(|| "first xor for s1", |ns| s1.xor(ns, &new_e.rotr(11)))?;
+                s1 = cs.namespace(|| "second xor for s1", |ns| s1.xor(ns, &new_e.rotr(25)))?;
 
-        // S1 := (e rightrotate 6) xor (e rightrotate 11) xor (e rightrotate 25)
-        let new_e = cs.namespace(|| "deferred e computation", |ns| e.compute(ns, &[]))?;
-        let mut s1 = new_e.rotr(6);
-        s1 = cs.namespace(|| "first xor for s1", |ns| s1.xor(ns, &new_e.rotr(11)))?;
-        s1 = cs.namespace(|| "second xor for s1", |ns| s1.xor(ns, &new_e.rotr(25)))?;
+                // ch := (e and f) xor ((not e) and g)
+                let ch = cs.namespace(|| "ch", |ns| UInt32::sha256_ch(ns, &new_e, &f, &g))?;
 
-        // ch := (e and f) xor ((not e) and g)
-        let ch = cs.namespace(|| "ch", |ns| UInt32::sha256_ch(ns, &new_e, &f, &g))?;
+                // temp1 := h + S1 + ch + k[i] + w[i]
+                let temp1 = vec![
+                    h.clone(),
+                    s1,
+                    ch,
+                    UInt32::constant(ROUND_CONSTANTS[i]),
+                    w[i].clone(),
+                ];
 
-        // temp1 := h + S1 + ch + k[i] + w[i]
-        let temp1 = vec![
-            h.clone(),
-            s1,
-            ch,
-            UInt32::constant(ROUND_CONSTANTS[i]),
-            w[i].clone(),
-        ];
+                // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
+                let new_a = cs.namespace(|| "deferred a computation", |ns| a.compute(ns, &[]))?;
+                let mut s0 = new_a.rotr(2);
+                s0 = cs.namespace(|| "first xor for s0", |ns| s0.xor(ns, &new_a.rotr(13)))?;
+                s0 = cs.namespace(|| "second xor for s0", |ns| s0.xor(ns, &new_a.rotr(22)))?;
 
-        // S0 := (a rightrotate 2) xor (a rightrotate 13) xor (a rightrotate 22)
-        let new_a = cs.namespace(|| "deferred a computation", |ns| a.compute(ns, &[]))?;
-        let mut s0 = new_a.rotr(2);
-        s0 = cs.namespace(|| "first xor for s0", |ns| s0.xor(ns, &new_a.rotr(13)))?;
-        s0 = cs.namespace(|| "second xor for s0", |ns| s0.xor(ns, &new_a.rotr(22)))?;
+                // maj := (a and b) xor (a and c) xor (b and c)
+                let maj = cs.namespace(|| "maj", |ns| UInt32::sha256_maj(ns, &new_a, &b, &c))?;
 
-        // maj := (a and b) xor (a and c) xor (b and c)
-        let maj = cs.namespace(|| "maj", |ns| UInt32::sha256_maj(ns, &new_a, &b, &c))?;
+                // temp2 := S0 + maj
+                let temp2 = vec![s0, maj];
 
-        // temp2 := S0 + maj
-        let temp2 = vec![s0, maj];
+                /*
+                h := g
+                g := f
+                f := e
+                e := d + temp1
+                d := c
+                c := b
+                b := a
+                a := temp1 + temp2
+                */
 
-        /*
-        h := g
-        g := f
-        f := e
-        e := d + temp1
-        d := c
-        c := b
-        b := a
-        a := temp1 + temp2
-        */
-
-        h = g;
-        g = f;
-        f = new_e;
-        e = Maybe::Deferred(temp1.iter().cloned().chain(Some(d)).collect::<Vec<_>>());
-        d = c;
-        c = b;
-        b = new_a;
-        a = Maybe::Deferred(
-            temp1
-                .iter()
-                .cloned()
-                .chain(temp2.iter().cloned())
-                .collect::<Vec<_>>(),
-        );
-            Result::<_, SynthesisError>::Ok((a, b, c, d, e, f, g))
-        })?;
+                h = g;
+                g = f;
+                f = new_e;
+                e = Maybe::Deferred(temp1.iter().cloned().chain(Some(d)).collect::<Vec<_>>());
+                d = c;
+                c = b;
+                b = new_a;
+                a = Maybe::Deferred(
+                    temp1
+                        .iter()
+                        .cloned()
+                        .chain(temp2.iter().cloned())
+                        .collect::<Vec<_>>(),
+                );
+                Result::<_, SynthesisError>::Ok((a, b, c, d, e, f, g))
+            },
+        )?;
     }
 
     /*
@@ -232,45 +239,45 @@ where
         h7 := h7 + h
     */
 
-    let h0 = cs.namespace(|| "deferred h0 computation", |ns| a.compute(
-        ns,
-        &[current_hash_value[0].clone()],
-    ))?;
+    let h0 = cs.namespace(
+        || "deferred h0 computation",
+        |ns| a.compute(ns, &[current_hash_value[0].clone()]),
+    )?;
 
-    let h1 = cs.namespace(|| "new h1", |ns| UInt32::addmany(
-        ns,
-        &[current_hash_value[1].clone(), b],
-    ))?;
+    let h1 = cs.namespace(
+        || "new h1",
+        |ns| UInt32::addmany(ns, &[current_hash_value[1].clone(), b]),
+    )?;
 
-    let h2 = cs.namespace(|| "new h2", |ns| UInt32::addmany(
-        ns,
-        &[current_hash_value[2].clone(), c],
-    ))?;
+    let h2 = cs.namespace(
+        || "new h2",
+        |ns| UInt32::addmany(ns, &[current_hash_value[2].clone(), c]),
+    )?;
 
-    let h3 = cs.namespace(|| "new h3", |ns| UInt32::addmany(
-        ns,
-        &[current_hash_value[3].clone(), d],
-    ))?;
+    let h3 = cs.namespace(
+        || "new h3",
+        |ns| UInt32::addmany(ns, &[current_hash_value[3].clone(), d]),
+    )?;
 
-    let h4 = cs.namespace(|| "deferred h4 computation", |ns| e.compute(
-        ns,
-        &[current_hash_value[4].clone()],
-    ))?;
+    let h4 = cs.namespace(
+        || "deferred h4 computation",
+        |ns| e.compute(ns, &[current_hash_value[4].clone()]),
+    )?;
 
-    let h5 = cs.namespace(|| "new h5", |ns| UInt32::addmany(
-        ns,
-        &[current_hash_value[5].clone(), f],
-    ))?;
+    let h5 = cs.namespace(
+        || "new h5",
+        |ns| UInt32::addmany(ns, &[current_hash_value[5].clone(), f]),
+    )?;
 
-    let h6 = cs.namespace(|| "new h6", |ns| UInt32::addmany(
-        ns,
-        &[current_hash_value[6].clone(), g],
-    ))?;
+    let h6 = cs.namespace(
+        || "new h6",
+        |ns| UInt32::addmany(ns, &[current_hash_value[6].clone(), g]),
+    )?;
 
-    let h7 = cs.namespace(|| "new h7", |ns| UInt32::addmany(
-        ns,
-        &[current_hash_value[7].clone(), h],
-    ))?;
+    let h7 = cs.namespace(
+        || "new h7",
+        |ns| UInt32::addmany(ns, &[current_hash_value[7].clone(), h]),
+    )?;
 
     Ok(vec![h0, h1, h2, h3, h4, h5, h6, h7])
 }
@@ -324,16 +331,20 @@ mod test {
         let input_bits: Vec<_> = (0..512)
             .map(|i| {
                 Boolean::from(
-                    cs.namespace(|| format!("input bit {}", i), |ns| AllocatedBit::alloc(
-                        ns,
-                        Some(rng.next_u32() % 2 != 0),
-                    ))
+                    cs.namespace(
+                        || format!("input bit {}", i),
+                        |ns| AllocatedBit::alloc(ns, Some(rng.next_u32() % 2 != 0)),
+                    )
                     .unwrap(),
                 )
             })
             .collect();
 
-        cs.namespace(|| "sha256", |ns| sha256_compression_function(ns, &input_bits, &iv)).unwrap();
+        cs.namespace(
+            || "sha256",
+            |ns| sha256_compression_function(ns, &input_bits, &iv),
+        )
+        .unwrap();
 
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints() - 512, 25840);
@@ -350,16 +361,17 @@ mod test {
         let input_bits: Vec<_> = (0..512)
             .map(|i| {
                 Boolean::from(
-                    cs.namespace(|| format!("input bit {}", i), |ns| AllocatedBit::alloc(
-                        ns,
-                        Some(rng.next_u32() % 2 != 0),
-                    ))
+                    cs.namespace(
+                        || format!("input bit {}", i),
+                        |ns| AllocatedBit::alloc(ns, Some(rng.next_u32() % 2 != 0)),
+                    )
                     .unwrap(),
                 )
             })
             .collect();
 
-        cs.namespace(|| "sha256", |ns| sha256(ns, &input_bits)).unwrap();
+        cs.namespace(|| "sha256", |ns| sha256(ns, &input_bits))
+            .unwrap();
 
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints() - 512, 44874);
@@ -385,13 +397,16 @@ mod test {
 
             for (byte_i, input_byte) in data.into_iter().enumerate() {
                 for bit_i in (0..8).rev() {
-                    cs.namespace(|| format!("input bit {} {}", byte_i, bit_i), |cs|
-
-                    input_bits.push(
-                        AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
-                            .unwrap()
-                            .into(),
-                    ));
+                    cs.namespace(
+                        || format!("input bit {} {}", byte_i, bit_i),
+                        |cs| {
+                            input_bits.push(
+                                AllocatedBit::alloc(cs, Some((input_byte >> bit_i) & 1u8 == 1u8))
+                                    .unwrap()
+                                    .into(),
+                            )
+                        },
+                    );
                 }
             }
 

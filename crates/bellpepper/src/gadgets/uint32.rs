@@ -63,10 +63,10 @@ impl UInt32 {
             .into_iter()
             .enumerate()
             .map(|(i, v)| {
-                Ok(Boolean::from(cs.namespace(|| format!("allocated bit {}", i), |ns| AllocatedBit::alloc(
-                    ns,
-                    v,
-                ))?))
+                Ok(Boolean::from(cs.namespace(
+                    || format!("allocated bit {}", i),
+                    |ns| AllocatedBit::alloc(ns, v),
+                )?))
             })
             .collect::<Result<Vec<_>, SynthesisError>>()?;
 
@@ -250,7 +250,12 @@ impl UInt32 {
             b,
             c,
             |a, b, c| (a & b) ^ (a & c) ^ (b & c),
-            |cs, i, a, b, c| cs.namespace(|| format!("maj {}", i), |ns| Boolean::sha256_maj(ns, a, b, c)),
+            |cs, i, a, b, c| {
+                cs.namespace(
+                    || format!("maj {}", i),
+                    |ns| Boolean::sha256_maj(ns, a, b, c),
+                )
+            },
         )
     }
 
@@ -272,7 +277,9 @@ impl UInt32 {
             b,
             c,
             |a, b, c| (a & b) ^ ((!a) & c),
-            |cs, i, a, b, c| cs.namespace(|| format!("ch {}", i), |ns| Boolean::sha256_ch(ns, a, b, c)),
+            |cs, i, a, b, c| {
+                cs.namespace(|| format!("ch {}", i), |ns| Boolean::sha256_ch(ns, a, b, c))
+            },
         )
     }
 
@@ -292,7 +299,9 @@ impl UInt32 {
             .iter()
             .zip(other.bits.iter())
             .enumerate()
-            .map(|(i, (a, b))| cs.namespace(|| format!("xor of bit {}", i), |ns| Boolean::xor(ns, a, b)))
+            .map(|(i, (a, b))| {
+                cs.namespace(|| format!("xor of bit {}", i), |ns| Boolean::xor(ns, a, b))
+            })
             .collect::<Result<_, _>>()?;
 
         Ok(UInt32 {
@@ -378,10 +387,10 @@ impl UInt32 {
         let mut i = 0;
         while max_value != 0 {
             // Allocate the bit
-            let b = cs.namespace(|| format!("result bit {}", i), |ns| AllocatedBit::alloc(
-                ns,
-                result_value.map(|v| (v >> i) & 1 == 1),
-            ))?;
+            let b = cs.namespace(
+                || format!("result bit {}", i),
+                |ns| AllocatedBit::alloc(ns, result_value.map(|v| (v >> i) & 1 == 1)),
+            )?;
 
             // Add this bit to the result combination
             result_lc = result_lc + (coeff, b.get_variable());
@@ -504,12 +513,20 @@ mod test {
 
             let mut expected = a ^ b ^ c;
 
-            let a_bit = cs.namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a))).unwrap();
+            let a_bit = cs
+                .namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a)))
+                .unwrap();
             let b_bit = UInt32::constant(b);
-            let c_bit = cs.namespace(|| "c_bit", |ns| UInt32::alloc(ns, Some(c))).unwrap();
+            let c_bit = cs
+                .namespace(|| "c_bit", |ns| UInt32::alloc(ns, Some(c)))
+                .unwrap();
 
-            let r = cs.namespace(|| "first xor", |ns| a_bit.xor(ns, &b_bit)).unwrap();
-            let r = cs.namespace(|| "second xor", |ns| r.xor(ns, &c_bit)).unwrap();
+            let r = cs
+                .namespace(|| "first xor", |ns| a_bit.xor(ns, &b_bit))
+                .unwrap();
+            let r = cs
+                .namespace(|| "second xor", |ns| r.xor(ns, &c_bit))
+                .unwrap();
 
             assert!(cs.is_satisfied());
 
@@ -555,8 +572,12 @@ mod test {
 
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
-                let r =
-                    cs.namespace(|| "addition", |ns| UInt32::addmany(ns, &[a_bit, b_bit, c_bit])).unwrap();
+                let r = cs
+                    .namespace(
+                        || "addition",
+                        |ns| UInt32::addmany(ns, &[a_bit, b_bit, c_bit]),
+                    )
+                    .unwrap();
                 r
             };
 
@@ -594,15 +615,20 @@ mod test {
 
             let mut expected = (a ^ b).wrapping_add(c).wrapping_add(d);
 
-            let a_bit = cs.namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a))).unwrap();
+            let a_bit = cs
+                .namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a)))
+                .unwrap();
             let b_bit = UInt32::constant(b);
             let c_bit = UInt32::constant(c);
-            let d_bit = cs.namespace(|| "d_bit", |ns| UInt32::alloc(ns, Some(d))).unwrap();
+            let d_bit = cs
+                .namespace(|| "d_bit", |ns| UInt32::alloc(ns, Some(d)))
+                .unwrap();
 
             let r = cs.namespace(|| "xor", |ns| a_bit.xor(ns, &b_bit)).unwrap();
             let r = {
                 let mut cs = MultiEq::new(&mut cs);
-                cs.namespace(|| "addition", |ns| UInt32::addmany(ns, &[r, c_bit, d_bit])).unwrap()
+                cs.namespace(|| "addition", |ns| UInt32::addmany(ns, &[r, c_bit, d_bit]))
+                    .unwrap()
             };
 
             assert!(cs.is_satisfied());
@@ -706,9 +732,13 @@ mod test {
 
             let mut expected = (a & b) ^ (a & c) ^ (b & c);
 
-            let a_bit = cs.namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a))).unwrap();
+            let a_bit = cs
+                .namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a)))
+                .unwrap();
             let b_bit = UInt32::constant(b);
-            let c_bit = cs.namespace(|| "c_bit", |ns| UInt32::alloc(ns, Some(c))).unwrap();
+            let c_bit = cs
+                .namespace(|| "c_bit", |ns| UInt32::alloc(ns, Some(c)))
+                .unwrap();
 
             let r = UInt32::sha256_maj(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
 
@@ -750,9 +780,13 @@ mod test {
 
             let mut expected = (a & b) ^ ((!a) & c);
 
-            let a_bit = cs.namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a))).unwrap();
+            let a_bit = cs
+                .namespace(|| "a_bit", |ns| UInt32::alloc(ns, Some(a)))
+                .unwrap();
             let b_bit = UInt32::constant(b);
-            let c_bit = cs.namespace(|| "c_bit", |ns| UInt32::alloc(ns, Some(c))).unwrap();
+            let c_bit = cs
+                .namespace(|| "c_bit", |ns| UInt32::alloc(ns, Some(c)))
+                .unwrap();
 
             let r = UInt32::sha256_ch(&mut cs, &a_bit, &b_bit, &c_bit).unwrap();
 

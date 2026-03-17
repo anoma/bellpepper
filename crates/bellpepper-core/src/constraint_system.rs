@@ -115,7 +115,9 @@ pub trait ConstraintSystem<Scalar: PrimeField>: Sized + Send {
 
     /// Gets the "root" constraint system, bypassing the namespacing.
     /// Not intended for downstream use; use `namespace` instead.
-    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T;
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T;
 
     /// Begin a namespace for this constraint system.
     fn namespace<NR, N, T, F>(&mut self, name_fn: N, f: F) -> T
@@ -299,7 +301,10 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
         panic!("only the root's pop_namespace should be called");
     }
 
-    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
         self.0.get_root(f)
     }
 
@@ -385,7 +390,10 @@ impl<'cs, Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Sca
         (**self).pop_namespace()
     }
 
-    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
         (**self).get_root(f)
     }
 

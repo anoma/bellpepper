@@ -441,7 +441,10 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for TestConstraintSystem<Scala
         assert!(self.current_namespace.pop().is_some());
     }
 
-    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
         f(self)
     }
 }
@@ -474,12 +477,10 @@ mod tests {
         assert!(cs.is_satisfied());
         assert_eq!(cs.num_constraints(), 0);
         let a = cs
-            .namespace(|| "a", |mut x|
-            x.alloc(|| "var", || Ok(Fr::from(10u64))))
+            .namespace(|| "a", |mut x| x.alloc(|| "var", || Ok(Fr::from(10u64))))
             .unwrap();
         let b = cs
-            .namespace(|| "b", |mut x|
-            x.alloc(|| "var", || Ok(Fr::from(4u64))))
+            .namespace(|| "b", |mut x| x.alloc(|| "var", || Ok(Fr::from(4u64))))
             .unwrap();
         let c = cs.alloc(|| "product", || Ok(Fr::from(40u64))).unwrap();
 
@@ -501,9 +502,11 @@ mod tests {
         assert!(cs.is_satisfied());
 
         {
-            cs.namespace(|| "test1", |mut cs|
-            cs.namespace(|| "test2", |mut cs|
-            cs.alloc(|| "hehe", || Ok(Fr::ONE)))).unwrap();
+            cs.namespace(
+                || "test1",
+                |mut cs| cs.namespace(|| "test2", |mut cs| cs.alloc(|| "hehe", || Ok(Fr::ONE))),
+            )
+            .unwrap();
         }
 
         assert!(cs.get("test1/test2/hehe") == Fr::ONE);

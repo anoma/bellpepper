@@ -63,10 +63,16 @@ where
     };
 
     // Allocate the x-coordinate resulting from the lookup
-    let res_x = cs.namespace(|| "x", |ns| AllocatedNum::alloc(ns, || Ok(coords[*i.get()?].0)))?;
+    let res_x = cs.namespace(
+        || "x",
+        |ns| AllocatedNum::alloc(ns, || Ok(coords[*i.get()?].0)),
+    )?;
 
     // Allocate the y-coordinate resulting from the lookup
-    let res_y = cs.namespace(|| "y", |ns| AllocatedNum::alloc(ns, || Ok(coords[*i.get()?].1)))?;
+    let res_y = cs.namespace(
+        || "y",
+        |ns| AllocatedNum::alloc(ns, || Ok(coords[*i.get()?].1)),
+    )?;
 
     // Compute the coefficients for the lookup constraints
     let mut x_coeffs = [Scalar::ZERO; 8];
@@ -147,13 +153,18 @@ where
 
     // Allocate the y-coordinate resulting from the lookup
     // and conditional negation
-    let y = cs.namespace(|| "y", |ns| AllocatedNum::alloc(ns, || {
-        let mut tmp = coords[*i.get()?].1;
-        if *bits[2].get_value().get()? {
-            tmp = -tmp;
-        }
-        Ok(tmp)
-    }))?;
+    let y = cs.namespace(
+        || "y",
+        |ns| {
+            AllocatedNum::alloc(ns, || {
+                let mut tmp = coords[*i.get()?].1;
+                if *bits[2].get_value().get()? {
+                    tmp = -tmp;
+                }
+                Ok(tmp)
+            })
+        },
+    )?;
 
     let one = CS::one();
 
@@ -207,13 +218,22 @@ mod test {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
             let a_val = rng.next_u32() % 2 != 0;
-            let a = Boolean::from(cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(a_val))).unwrap());
+            let a = Boolean::from(
+                cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(a_val)))
+                    .unwrap(),
+            );
 
             let b_val = rng.next_u32() % 2 != 0;
-            let b = Boolean::from(cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(b_val))).unwrap());
+            let b = Boolean::from(
+                cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(b_val)))
+                    .unwrap(),
+            );
 
             let c_val = rng.next_u32() % 2 != 0;
-            let c = Boolean::from(cs.namespace(|| "c", |ns| AllocatedBit::alloc(ns, Some(c_val))).unwrap());
+            let c = Boolean::from(
+                cs.namespace(|| "c", |ns| AllocatedBit::alloc(ns, Some(c_val)))
+                    .unwrap(),
+            );
 
             let bits = vec![a, b, c];
 
@@ -252,13 +272,22 @@ mod test {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
             let a_val = rng.next_u32() % 2 != 0;
-            let a = Boolean::from(cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(a_val))).unwrap());
+            let a = Boolean::from(
+                cs.namespace(|| "a", |ns| AllocatedBit::alloc(ns, Some(a_val)))
+                    .unwrap(),
+            );
 
             let b_val = rng.next_u32() % 2 != 0;
-            let b = Boolean::from(cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(b_val))).unwrap());
+            let b = Boolean::from(
+                cs.namespace(|| "b", |ns| AllocatedBit::alloc(ns, Some(b_val)))
+                    .unwrap(),
+            );
 
             let c_val = rng.next_u32() % 2 != 0;
-            let c = Boolean::from(cs.namespace(|| "c", |ns| AllocatedBit::alloc(ns, Some(c_val))).unwrap());
+            let c = Boolean::from(
+                cs.namespace(|| "c", |ns| AllocatedBit::alloc(ns, Some(c_val)))
+                    .unwrap(),
+            );
 
             let bits = vec![a, b, c];
 

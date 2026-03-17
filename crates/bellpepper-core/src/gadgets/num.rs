@@ -28,7 +28,7 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
     pub fn new_unchecked(variable: Variable, value: Option<Scalar>) -> Self {
         Self { value, variable }
     }
-    
+
     /// Allocate a `Variable(Aux)` in a `ConstraintSystem`.
     pub fn alloc<CS, F>(mut cs: CS, value: F) -> Result<Self, SynthesisError>
     where
@@ -154,11 +154,10 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
                 if cur.is_none() {
                     cur = Some(v.clone());
                 } else {
-                    cur = Some(cs.namespace(|| format!("and {}", i), |ns| AllocatedBit::and(
-                        ns,
-                        cur.as_ref().unwrap(),
-                        v,
-                    ))?);
+                    cur = Some(cs.namespace(
+                        || format!("and {}", i),
+                        |ns| AllocatedBit::and(ns, cur.as_ref().unwrap(), v),
+                    )?);
                 }
             }
 
@@ -197,7 +196,8 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
             if b {
                 // This is part of a run of ones. Let's just
                 // allocate the boolean with the expected value.
-                let a_bit = cs.namespace(|| format!("bit {}", i), |ns| AllocatedBit::alloc(ns, a_bit))?;
+                let a_bit =
+                    cs.namespace(|| format!("bit {}", i), |ns| AllocatedBit::alloc(ns, a_bit))?;
                 // ... and add it to the current run of ones.
                 current_run.push(a_bit.clone());
                 result.push(a_bit);
@@ -209,10 +209,10 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
                     if last_run.is_some() {
                         current_run.push(last_run.clone().unwrap());
                     }
-                    last_run = Some(cs.namespace(|| format!("run ending at {}", i), |ns| kary_and(
-                        ns,
-                        &current_run,
-                    ))?);
+                    last_run = Some(cs.namespace(
+                        || format!("run ending at {}", i),
+                        |ns| kary_and(ns, &current_run),
+                    )?);
                     current_run.truncate(0);
                 }
 
@@ -221,11 +221,16 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
                 //
                 // If `last_run` is false, `a` can be true or false.
 
-                let a_bit = cs.namespace(|| format!("bit {}", i), |ns| AllocatedBit::alloc_conditionally(
-                    ns,
-                    a_bit,
-                    last_run.as_ref().expect("char always starts with a one"),
-                ))?;
+                let a_bit = cs.namespace(
+                    || format!("bit {}", i),
+                    |ns| {
+                        AllocatedBit::alloc_conditionally(
+                            ns,
+                            a_bit,
+                            last_run.as_ref().expect("char always starts with a one"),
+                        )
+                    },
+                )?;
                 result.push(a_bit);
             }
 
@@ -420,16 +425,21 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
     where
         CS: ConstraintSystem<Scalar>,
     {
-        let c = cs.namespace(|| "conditional reversal result 1", |ns| Self::alloc(ns, || {
-            if condition
-                .get_value()
-                .ok_or(SynthesisError::AssignmentMissing)?
-            {
-                Ok(b.value.ok_or(SynthesisError::AssignmentMissing)?)
-            } else {
-                Ok(a.value.ok_or(SynthesisError::AssignmentMissing)?)
-            }
-        }))?;
+        let c = cs.namespace(
+            || "conditional reversal result 1",
+            |ns| {
+                Self::alloc(ns, || {
+                    if condition
+                        .get_value()
+                        .ok_or(SynthesisError::AssignmentMissing)?
+                    {
+                        Ok(b.value.ok_or(SynthesisError::AssignmentMissing)?)
+                    } else {
+                        Ok(a.value.ok_or(SynthesisError::AssignmentMissing)?)
+                    }
+                })
+            },
+        )?;
 
         cs.enforce(
             || "first conditional reversal",
@@ -438,16 +448,21 @@ impl<Scalar: PrimeField> AllocatedNum<Scalar> {
             |lc| lc + a.variable - c.variable,
         );
 
-        let d = cs.namespace(|| "conditional reversal result 2", |ns| Self::alloc(ns, || {
-            if condition
-                .get_value()
-                .ok_or(SynthesisError::AssignmentMissing)?
-            {
-                Ok(a.value.ok_or(SynthesisError::AssignmentMissing)?)
-            } else {
-                Ok(b.value.ok_or(SynthesisError::AssignmentMissing)?)
-            }
-        }))?;
+        let d = cs.namespace(
+            || "conditional reversal result 2",
+            |ns| {
+                Self::alloc(ns, || {
+                    if condition
+                        .get_value()
+                        .ok_or(SynthesisError::AssignmentMissing)?
+                    {
+                        Ok(a.value.ok_or(SynthesisError::AssignmentMissing)?)
+                    } else {
+                        Ok(b.value.ok_or(SynthesisError::AssignmentMissing)?)
+                    }
+                })
+            },
+        )?;
 
         cs.enforce(
             || "second conditional reversal",
@@ -587,8 +602,12 @@ mod test {
         assert!(bool::from(mod_minus_one.is_some()));
         let mod_minus_one = mod_minus_one.unwrap();
 
-        let a = cs.namespace(|| "a", |ns| AllocatedNum::alloc(ns, || Ok(mod_minus_one))).unwrap();
-        let b = cs.namespace(|| "b", |ns| AllocatedNum::alloc(ns, || Ok(Fr::ONE))).unwrap();
+        let a = cs
+            .namespace(|| "a", |ns| AllocatedNum::alloc(ns, || Ok(mod_minus_one)))
+            .unwrap();
+        let b = cs
+            .namespace(|| "b", |ns| AllocatedNum::alloc(ns, || Ok(Fr::ONE)))
+            .unwrap();
         let c = a.add(&mut cs, &b).unwrap();
 
         assert!(cs.is_satisfied());
@@ -616,8 +635,12 @@ mod test {
     fn test_num_multiplication() {
         let mut cs = TestConstraintSystem::<Fr>::new();
 
-        let n = cs.namespace(|| "a", |ns| AllocatedNum::alloc(ns, || Ok(Fr::from(12u64)))).unwrap();
-        let n2 = cs.namespace(|| "b", |ns| AllocatedNum::alloc(ns, || Ok(Fr::from(10u64)))).unwrap();
+        let n = cs
+            .namespace(|| "a", |ns| AllocatedNum::alloc(ns, || Ok(Fr::from(12u64))))
+            .unwrap();
+        let n2 = cs
+            .namespace(|| "b", |ns| AllocatedNum::alloc(ns, || Ok(Fr::from(10u64))))
+            .unwrap();
         let n3 = n.mul(&mut cs, &n2).unwrap();
 
         assert!(cs.is_satisfied());
@@ -636,8 +659,18 @@ mod test {
         {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
-            let a = cs.namespace(|| "a", |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng)))).unwrap();
-            let b = cs.namespace(|| "b", |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng)))).unwrap();
+            let a = cs
+                .namespace(
+                    || "a",
+                    |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng))),
+                )
+                .unwrap();
+            let b = cs
+                .namespace(
+                    || "b",
+                    |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng))),
+                )
+                .unwrap();
             let condition = Boolean::constant(false);
             let (c, d) = AllocatedNum::conditionally_reverse(&mut cs, &a, &b, &condition).unwrap();
 
@@ -650,8 +683,18 @@ mod test {
         {
             let mut cs = TestConstraintSystem::<Fr>::new();
 
-            let a = cs.namespace(|| "a", |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng)))).unwrap();
-            let b = cs.namespace(|| "b", |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng)))).unwrap();
+            let a = cs
+                .namespace(
+                    || "a",
+                    |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng))),
+                )
+                .unwrap();
+            let b = cs
+                .namespace(
+                    || "b",
+                    |ns| AllocatedNum::alloc(ns, || Ok(Fr::random(&mut rng))),
+                )
+                .unwrap();
             let condition = Boolean::constant(true);
             let (c, d) = AllocatedNum::conditionally_reverse(&mut cs, &a, &b, &condition).unwrap();
 

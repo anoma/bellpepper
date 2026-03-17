@@ -280,7 +280,10 @@ impl<Scalar: PrimeField> ConstraintSystem<Scalar> for MetricCS<Scalar> {
         assert!(self.current_namespace.pop().is_some());
     }
 
-    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
         f(self)
     }
 }

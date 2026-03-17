@@ -116,7 +116,10 @@ impl<Scalar: PrimeField, CS: ConstraintSystem<Scalar>> ConstraintSystem<Scalar>
         self.cs.get_root(|x| x.pop_namespace())
     }
 
-    fn get_root<T, F>(&mut self, f: F) -> T where F: FnOnce(&mut Self::Root) -> T {
+    fn get_root<T, F>(&mut self, f: F) -> T
+    where
+        F: FnOnce(&mut Self::Root) -> T,
+    {
         f(self)
     }
 }
